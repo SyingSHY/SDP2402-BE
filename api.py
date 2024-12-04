@@ -1,4 +1,5 @@
 import io
+import time
 import json
 import wave
 import base64
@@ -17,11 +18,16 @@ CLUSTERING_MODULE_URI = "http://127.0.0.1:4474"
 
 HEADERS = {'User-Agent': ''}
 
+class TextWithLabel(BaseModel):
+    message: str
+    label: int
+
 class TTSRequest(BaseModel):
     channel_id: str
     msg_text: str
     image_data: str
-    texts: list[str]
+    texts: list[TextWithLabel]
+    meta: str
 
 class ConnectionManager:
     def __init__(self):
@@ -202,12 +208,21 @@ async def get_channel_name(channel_id:str):
 async def internal_voice(request: TTSRequest):
     try:
         if request.channel_id in connection_manager.active_connections:
+            tts_time_start = time.perf_counter()
             audio_content = await tts_with_google(VOICE_NAME, request.msg_text)
             audio_length = get_audio_length(audio_content)
+            tts_time_end = time.perf_counter()
+            tts_time = tts_time_end - tts_time_start
+
+            request.meta += f"TTS Supplier: Google TTS\n"
+            + f"Selected Voice Type: " + VOICE_NAME + "\n"
+            + f"TTS Delay: {tts_time * 1000} ms\n"
+            + f"Audio Playtime: {audio_length} sec\n"
 
             await connection_manager.send_audio(request.channel_id, audio_content)
             await connection_manager.send_image(request.channel_id, base64.b64decode(request.image_data))
-            await connection_manager.send_json(request.channel_id, json.dumps({'top_chat': request.msg_text, 'texts': request.texts}))
+            request_data = request.model_dump(exclude={"image_data"})
+            await connection_manager.send_json(request.channel_id, json.dumps(request_data))
 
             print(f"TTS 완료 : 최소 {audio_length} 뒤 다음 클러스터링 시작")
             return {"audio_length_seconds": audio_length}

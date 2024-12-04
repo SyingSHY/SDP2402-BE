@@ -91,7 +91,7 @@ class ClusteringModule:
             message = await self.consumer.read()  # 1초 대기하며 메시지 읽기
             if not message:
                 break  # 더 이상 메시지가 없으면 종료
-            
+
         try:
             while self.is_running:
                 # 메시지들을 저장할 리스트
@@ -202,7 +202,21 @@ class ClusteringModule:
                     print(f"가장 중심에 있는 문장: {center_sentence}")
                     print(f"처리 소요 시간: {elapsed_time_all_ms:.2f} ms\n")
 
-                    cluster_data = {'channel_id': self.channel_id, 'msg_text': center_sentence, 'image_data': encode_image_to_base64("cluster_plot.png"), 'texts': messages}
+                    cluster_meta = f"Target Channel ID:\n{self.channel_id}\n"
+                    + f"Total Clustered Chats: {len(messages)}\n"
+                    + f"Embedding Delay: {elapsed_time_embedding_ms} ms\n"
+                    + f"Clustering Method: AC\n"
+                    + f"Clustering Delay: {elapsed_time_clustering_ms} ms\n"
+                    cluster_data = {
+                        'channel_id': self.channel_id,
+                        'msg_text': center_sentence,
+                        'image_data': encode_image_to_base64("cluster_plot.png"),
+                        'texts': messages,
+                        'meta' : cluster_meta
+                        }
+                    cluster_data['texts'] = [
+                        {'message': msg, 'label': label} for msg, label in zip(messages, agg_labels)
+                        ]
                     try:
                         res = requests.post(MAIN_SERVER_URI+MAIN_SERVER_API_TTS, data=json.dumps(cluster_data))
                     except:
@@ -214,9 +228,26 @@ class ClusteringModule:
                     messages.clear()
                     continue
                 else:
-                                        # 3개 이하 메시지로 인해 가장 최근 메시지를 TTS 변환
+                    # 3개 이하 메시지로 인해 가장 최근 메시지를 TTS 변환
                     print("-------------------")
-                    cluster_data = {'channel_id': self.channel_id, 'msg_text': messages[-1], 'image_data': encode_image_to_base64("cluster_skipped.png"), 'texts': messages}
+                    agg_labels = [0] * len(messages)  # 기본적으로 모든 라벨을 0으로 초기화
+                    if messages:
+                        agg_labels[-1] = 1
+                    cluster_meta = f"Target Channel ID:\n{self.channel_id}\n"
+                    + f"Total Clustered Chats: {len(messages)}\n"
+                    + f"Embedding Delay: Skipped\n"
+                    + f"Clustering Method: Skipped\n"
+                    + f"Clustering Delay: Skipped\n"
+                    cluster_data = {
+                        'channel_id': self.channel_id,
+                        'msg_text': messages[-1],
+                        'image_data': encode_image_to_base64("cluster_skipped.png"),
+                        'texts': messages,
+                        'meta' : cluster_meta
+                        }
+                    cluster_data['texts'] = [
+                        {'message': msg, 'label': label} for msg, label in zip(messages, agg_labels)
+                        ]
                     try:
                         res = requests.post(MAIN_SERVER_URI+MAIN_SERVER_API_TTS, data=json.dumps(cluster_data))
                     except:
